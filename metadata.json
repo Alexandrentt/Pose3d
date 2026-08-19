@@ -1,0 +1,6 @@
+{
+  "name": "Maniquí 3D",
+  "description": "Mueve y posa un maniquí 3D para usar como referencia de dibujo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

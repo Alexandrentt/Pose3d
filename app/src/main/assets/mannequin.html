@@ -1,0 +1,1845 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Maniquí 3D</title>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+    <style>
+        body { margin: 0; padding: 0; display: flex; height: 100vh; overflow: hidden; background: #535353; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #D4D4D4; font-size: 12px; }
+        /* Left Toolbar */
+        .toolbar { width: 40px; background: #2D2D30; border-right: 1px solid #1E1E1E; display: flex; flex-direction: column; align-items: center; padding-top: 4px; gap: 4px; z-index: 10; flex-shrink: 0; }
+        .tool-btn { width: 32px; height: 32px; border-radius: 4px; border: 1px solid transparent; background: transparent; color: #C8C8C8; cursor: pointer; display: flex; justify-content: center; align-items: center; transition: 0.1s; }
+        .tool-btn:hover { background: #3F3F46; border-color: #555; }
+        .tool-btn.active { background: #007ACC; color: #FFF; border-color: #007ACC; }
+        .tool-btn .material-symbols-outlined { font-size: 20px; }
+        .separator { width: 24px; height: 1px; background: #555; margin: 4px 0; }
+        
+        /* Center Canvas */
+        .canvas-area { flex-grow: 1; position: relative; display: flex; flex-direction: column; min-width: 0; background: #353535; }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; outline: none; display: flex; transition: opacity 0.2s; }
+        #canvas-container canvas { width: 100% !important; height: 100% !important; }
+        #drawing-layers-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; touch-action: none; }
+        #drawing-layers-container canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        #input_video { position: absolute; top: 16px; left: 16px; width: 160px; border-radius: 4px; border: 1px solid #007ACC; transform: scaleX(-1); z-index: 90; display: none; }
+        #loading-overlay { position: absolute; inset: 0; background: rgba(30,30,30,0.8); z-index: 1000; display: none; flex-direction: column; justify-content: center; align-items: center; font-size: 14px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Right Panel */
+        .panel { width: 260px; background: #252526; border-left: 1px solid #1E1E1E; display: flex; flex-direction: column; z-index: 10; overflow-y: auto; flex-shrink: 0; }
+        .panel-header { background: #333333; padding: 6px 10px; font-weight: 600; border-bottom: 1px solid #1E1E1E; border-top: 1px solid #444; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .panel-header:first-child { border-top: none; }
+        .panel-section { padding: 10px; border-bottom: 1px solid #1E1E1E; display: flex; flex-direction: column; gap: 8px; }
+        
+        /* Controls */
+        .control-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .control-row label { flex-shrink: 0; width: 70px; }
+        input[type=range] { flex-grow: 1; height: 4px; -webkit-appearance: none; background: #3F3F46; border-radius: 2px; outline: none; margin: 0; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: #007ACC; cursor: pointer; }
+        input[type=number] { width: 44px; background: #3C3C3C; border: 1px solid #555; color: #FFF; font-size: 11px; padding: 2px 4px; border-radius: 2px; text-align: right; outline: none; }
+        input[type=number]:focus { border-color: #007ACC; }
+        input[type=color] { width: 24px; height: 24px; padding: 0; border: 1px solid #555; border-radius: 2px; background: #3C3C3C; cursor: pointer; }
+        
+        /* Poses Grid */
+        .poses-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .pose-btn { background: #333333; border: 1px solid #444; border-radius: 4px; color: #CCC; padding: 8px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: 0.1s; }
+        .pose-btn:hover { background: #3F3F46; }
+        .pose-btn.active { background: #007ACC; color: #FFF; border-color: #007ACC; }
+        .pose-btn span.material-symbols-outlined { font-size: 24px; }
+        .pose-btn div { font-size: 10px; }
+        
+        /* Layers */
+        .layer-item { display: flex; align-items: center; padding: 6px 10px; border-bottom: 1px solid #1E1E1E; gap: 6px; cursor: pointer; background: #2D2D30; }
+        .layer-item.active { background: #3F3F46; border-left: 3px solid #007ACC; padding-left: 7px; }
+        .layer-item .material-symbols-outlined { font-size: 16px; cursor: pointer; color: #AAA; user-select: none; }
+        .layer-item .material-symbols-outlined:hover { color: #FFF; }
+        .layer-name { flex-grow: 1; font-size: 11px; user-select: none; }
+        .layer-opacity { width: 50px; height: 4px; margin: 0; }
+        
+        /* Zen Mode (Fullscreen) */
+        body.zen-mode .toolbar { display: none !important; }
+        body.zen-mode .panel { display: none !important; }
+        body.zen-mode .zen-btn { display: flex; }
+        .zen-btn { position: absolute; top: 16px; right: 16px; z-index: 200; background: rgba(30, 30, 30, 0.7); border: 1px solid #555; color: #FFF; border-radius: 4px; padding: 6px; cursor: pointer; display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .zen-btn:hover { background: rgba(80, 80, 80, 0.9); }
+        
+        /* Misc */
+        .action-btn { background: #333; border: 1px solid #555; color: #FFF; padding: 6px 12px; border-radius: 2px; cursor: pointer; text-align: center; }
+        .action-btn:hover { background: #444; }
+        .action-btn:active { background: #007ACC; border-color: #007ACC; }
+
+        /* Responsive / Mobile Portrait Support */
+        @media (max-width: 600px), (orientation: portrait) {
+            body { flex-direction: column; }
+            .toolbar { width: 100%; height: 48px; flex-direction: row; justify-content: space-evenly; padding-top: 0; padding-bottom: 0; border-right: none; border-bottom: 1px solid #1E1E1E; overflow-x: auto; }
+            .separator { width: 1px; height: 24px; margin: 0 4px; }
+            .panel { width: 100%; height: 35vh; border-left: none; border-top: 1px solid #1E1E1E; }
+        }
+
+        /* Grid & Perspective Guides */
+        .grid-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .grid-overlay.show-ortho {
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.4) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.4) 1px, transparent 1px),
+                linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px);
+            background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
+            background-position: center center;
+        }
+        .grid-overlay.show-persp {
+            background-image: 
+                repeating-conic-gradient(from 0deg, rgba(255,255,255,0.6) 0deg 0.5deg, transparent 0.5deg 15deg),
+                linear-gradient(rgba(255,255,255,0.2) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.2) 1px, transparent 1px);
+            background-size: 100% 100%, 100px 100px, 100px 100px;
+            background-position: center center;
+        }
+    </style>
+</head>
+<body>
+    <!-- Gallery / Dashboard -->
+    <div id="gallery-ui" style="display: flex; flex-direction: column; position: fixed; top:0; left:0; width:100%; height:100%; background:#1E1E1E; z-index: 10000; padding: 30px; overflow-y: auto;">
+        <h1 style="color: #E0E0E0; margin-top: 0; margin-bottom: 30px; font-weight: 300; display: flex; align-items: center; justify-content: space-between;">
+            Tus Lienzos
+            <button class="action-btn" style="width: auto; padding: 10px 20px; font-size: 16px; display: flex; align-items: center; gap: 8px;" onclick="createNewProject()">
+                <span class="material-symbols-outlined">add</span> Nuevo Lienzo
+            </button>
+        </h1>
+        <div id="gallery-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px;">
+            <!-- Project Cards go here -->
+        </div>
+    </div>
+
+    <!-- Left Toolbar -->
+    <div class="toolbar">
+        <button class="tool-btn" onclick="openGallery()" title="Volver a Galería"><span class="material-symbols-outlined">grid_view</span></button>
+        <div class="separator"></div>
+        <button class="tool-btn active" id="tool-rotate" onclick="setToolMode('rotate')" title="Rotar (Rotate)"><span class="material-symbols-outlined">rotate_right</span></button>
+        <button class="tool-btn" id="tool-translate" onclick="setToolMode('translate')" title="Mover (Translate)"><span class="material-symbols-outlined">open_with</span></button>
+        <button class="tool-btn" id="tool-scale" onclick="setToolMode('scale')" title="Escalar (Scale)"><span class="material-symbols-outlined">transform</span></button>
+        <div class="separator"></div>
+        <button class="tool-btn" id="tool-brush" onclick="setToolMode('brush')" title="Pincel (Brush)"><span class="material-symbols-outlined">brush</span></button>
+        <button class="tool-btn" id="tool-eraser" onclick="setToolMode('eraser')" title="Borrador (Eraser)"><span class="material-symbols-outlined">ink_eraser</span></button>
+        <button class="tool-btn" onclick="clearCanvas()" title="Limpiar Lienzo"><span class="material-symbols-outlined">delete</span></button>
+        <div class="separator"></div>
+        <button class="tool-btn" id="tool-visibility" onclick="toggle3DVisibility()" title="Visibilidad 3D"><span class="material-symbols-outlined">visibility</span></button>
+        <button class="tool-btn" id="tool-grid" onclick="toggleGrid()" title="Guías (Cuadrícula / Perspectiva)"><span class="material-symbols-outlined" style="color: #CCC;">grid_off</span></button>
+        <div class="separator"></div>
+        <input type="file" id="file-input" style="display: none" accept=".glb,.gltf,.obj,.fbx">
+        <button class="tool-btn" onclick="document.getElementById('file-input').click()" title="Importar Modelo 3D"><span class="material-symbols-outlined">folder_open</span></button>
+        <input type="file" id="image-import-input" style="display: none" accept="image/*" onchange="handleImageImport(event)">
+        <button class="tool-btn" onclick="document.getElementById('image-import-input').click()" title="Importar Imagen de Referencia"><span class="material-symbols-outlined">add_photo_alternate</span></button>
+        <button class="tool-btn" id="tool-camera" onclick="toggleHandTracking()" title="Escáner de Mano (Cámara)"><span class="material-symbols-outlined">back_hand</span></button>
+        <div class="separator"></div>
+        <button class="tool-btn" id="btn-record" onclick="exportTimelapse()" title="Grabar Proceso (Timelapse)"><span class="material-symbols-outlined">videocam</span></button>
+        <button class="tool-btn" onclick="showExportDialog()" title="Exportar Imagen"><span class="material-symbols-outlined">download</span></button>
+        <button class="tool-btn" onclick="toggleZenMode()" title="Modo Pantalla Completa"><span class="material-symbols-outlined">fullscreen</span></button>
+    </div>
+    
+    <!-- Center Canvas -->
+    <div class="canvas-area">
+        <button class="zen-btn" onclick="toggleZenMode()" title="Salir de Pantalla Completa"><span class="material-symbols-outlined">fullscreen_exit</span></button>
+        
+        <!-- Export Dialog -->
+        <div id="export-dialog" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; align-items:center; justify-content:center; flex-direction:column;">
+            <div style="background:#252526; padding:24px; border-radius:8px; border:1px solid #444; width: 300px; text-align:center;">
+                <h3 style="margin-top:0; color:#FFF;">Exportar Imagen</h3>
+                <p style="color:#CCC; font-size:14px; margin-bottom:20px;">¿Deseas incluir el modelo 3D de fondo en tu imagen final?</p>
+                <div style="display:flex; justify-content:space-between; gap: 10px;">
+                    <button class="action-btn" style="flex:1;" onclick="exportImage(true)">Sí, con 3D</button>
+                    <button class="action-btn" style="flex:1;" onclick="exportImage(false)">Solo Dibujo</button>
+                </div>
+                <button class="action-btn" style="margin-top:15px; width:100%; background:transparent; border-color:transparent; color:#888;" onclick="document.getElementById('export-dialog').style.display='none'">Cancelar</button>
+            </div>
+        </div>
+
+        <div id="loading-overlay">
+            <span class="material-symbols-outlined" style="font-size: 32px; animation: spin 1s linear infinite;">sync</span>
+            <div id="loading-text" style="margin-top: 8px;">Procesando...</div>
+        </div>
+        <video id="input_video"></video>
+        <div id="canvas-container"></div>
+        <div id="drawing-layers-container"></div>
+        <div id="grid-overlay" class="grid-overlay"></div>
+        <div id="interaction-overlay" style="position: absolute; inset: 0; z-index: 9999; pointer-events: none; touch-action: none;"></div>
+    </div>
+    
+    <!-- Right Panel -->
+    <div class="panel">
+        <div class="panel-header">Tipo de Pincel</div>
+        <div class="panel-section">
+            <div class="poses-grid" style="grid-template-columns: repeat(3, 1fr);">
+                <button class="pose-btn active" id="btn-brush-gpen" onclick="setBrushPreset('gpen')" style="padding: 6px;">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">edit</span>
+                    <div>Pluma G</div>
+                </button>
+                <button class="pose-btn" id="btn-brush-pencil" onclick="setBrushPreset('pencil')" style="padding: 6px;">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">edit_square</span>
+                    <div>Lápiz</div>
+                </button>
+                <button class="pose-btn" id="btn-brush-charcoal" onclick="setBrushPreset('charcoal')" style="padding: 6px;">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">brush</span>
+                    <div>Carbón</div>
+                </button>
+                <button class="pose-btn" id="btn-brush-airbrush" onclick="setBrushPreset('airbrush')" style="padding: 6px;">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">air</span>
+                    <div>Aero.</div>
+                </button>
+                <button class="pose-btn" id="btn-brush-marker" onclick="setBrushPreset('marker')" style="padding: 6px;">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">draw</span>
+                    <div>Marca.</div>
+                </button>
+                <button class="pose-btn" id="btn-brush-water" onclick="setBrushPreset('water')" style="padding: 6px;">
+                    <span class="material-symbols-outlined" style="font-size: 20px;">water_drop</span>
+                    <div>Agua</div>
+                </button>
+            </div>
+            <div class="control-row" style="margin-top: 8px;">
+                <label title="Estabilización del trazo">Estabilizador</label>
+                <input type="range" id="brush-smooth" min="0" max="95" value="50">
+                <input type="number" id="brush-smooth-num" value="50" style="width: 32px;">
+            </div>
+        </div>
+
+        <div class="panel-header">Capas de Dibujo</div>
+        <div class="panel-section" style="padding: 0;">
+            <div id="layers-list" style="max-height: 150px; overflow-y: auto;">
+                <!-- Layer items -->
+            </div>
+            <div style="padding: 8px; border-top: 1px solid #1E1E1E; display: flex; gap: 4px;">
+                <button class="action-btn" onclick="addLayer()" style="flex-grow: 1;">+ Nueva Capa</button>
+            </div>
+        </div>
+
+        <div class="panel-header">Pincel (S-Pen)</div>
+        <div class="panel-section">
+            <div class="control-row">
+                <label>Tamaño</label>
+                <input type="range" id="brush-size" min="1" max="100" value="5">
+                <input type="number" id="brush-size-num" value="5">
+            </div>
+            <div class="control-row">
+                <label>Color</label>
+                <input type="color" id="brush-color" value="#007ACC">
+            </div>
+            <div style="display: flex; gap: 4px; margin-top: 8px;">
+                <button style="width: 24px; height: 24px; border-radius: 50%; border: none; background: #FF3B30;" onclick="document.getElementById('brush-color').value='#FF3B30'; brushColor='#FF3B30';"></button>
+                <button style="width: 24px; height: 24px; border-radius: 50%; border: none; background: #FF9500;" onclick="document.getElementById('brush-color').value='#FF9500'; brushColor='#FF9500';"></button>
+                <button style="width: 24px; height: 24px; border-radius: 50%; border: none; background: #FFCC00;" onclick="document.getElementById('brush-color').value='#FFCC00'; brushColor='#FFCC00';"></button>
+                <button style="width: 24px; height: 24px; border-radius: 50%; border: none; background: #4CD964;" onclick="document.getElementById('brush-color').value='#4CD964'; brushColor='#4CD964';"></button>
+                <button style="width: 24px; height: 24px; border-radius: 50%; border: none; background: #5AC8FA;" onclick="document.getElementById('brush-color').value='#5AC8FA'; brushColor='#5AC8FA';"></button>
+                <button style="width: 24px; height: 24px; border-radius: 50%; border: none; background: #007ACC;" onclick="document.getElementById('brush-color').value='#007ACC'; brushColor='#007ACC';"></button>
+                <button style="width: 24px; height: 24px; border-radius: 50%; border: none; background: #5856D6;" onclick="document.getElementById('brush-color').value='#5856D6'; brushColor='#5856D6';"></button>
+                <button style="width: 24px; height: 24px; border-radius: 50%; border: none; background: #000000; border: 1px solid #444;" onclick="document.getElementById('brush-color').value='#000000'; brushColor='#000000';"></button>
+                <button style="width: 24px; height: 24px; border-radius: 50%; border: none; background: #FFFFFF; border: 1px solid #444;" onclick="document.getElementById('brush-color').value='#FFFFFF'; brushColor='#FFFFFF';"></button>
+            </div>
+        </div>
+
+        <div class="panel-header">Objeto</div>
+        <div class="panel-section">
+            <button class="action-btn" onclick="resetPose()">Restablecer Base</button>
+        </div>
+        
+        <div class="panel-header">Cámara (Perspectiva)</div>
+        <div class="panel-section">
+            <div class="control-row">
+                <label title="Distancia Focal / Field of View">Escorzo (FOV)</label>
+                <input type="range" id="cam-fov" min="10" max="120" step="1" value="45">
+                <input type="number" id="cam-fov-num" value="45">
+            </div>
+        </div>
+        
+        <div class="panel-header">Visualización</div>
+        <div class="panel-section">
+            <button class="action-btn" id="btn-wireframe" onclick="toggleWireframe()">Modo: Sólido (Render)</button>
+        </div>
+        
+        <div class="panel-header">Fuente de Luz</div>
+        <div class="panel-section">
+            <div class="control-row">
+                <label>Intensidad</label>
+                <input type="range" id="light-int" min="0" max="3" step="0.1" value="0.8">
+                <input type="number" id="light-int-num" value="0.8" step="0.1">
+            </div>
+            <div class="control-row">
+                <label>Ángulo X</label>
+                <input type="range" id="light-angx" min="-20" max="20" step="1" value="5">
+                <input type="number" id="light-angx-num" value="5">
+            </div>
+            <div class="control-row">
+                <label>Ángulo Z</label>
+                <input type="range" id="light-angz" min="-20" max="20" step="1" value="7">
+                <input type="number" id="light-angz-num" value="7">
+            </div>
+            <div class="control-row">
+                <label>Luz Relleno</label>
+                <input type="range" id="light-fill" min="0" max="2" step="0.1" value="0.3">
+                <input type="number" id="light-fill-num" value="0.3" step="0.1">
+            </div>
+            <div class="control-row">
+                <label>Color</label>
+                <input type="color" id="light-color" value="#ffffff">
+            </div>
+        </div>
+        
+        <div class="panel-header">Poses Predefinidas</div>
+        <div class="panel-section poses-grid" style="grid-template-columns: repeat(2, 1fr);">
+            <button class="pose-btn active" id="pose-standing" onclick="applyPose('standing', this)">
+                <span class="material-symbols-outlined">accessibility_new</span>
+                <div>Normal</div>
+            </button>
+            <button class="pose-btn" id="pose-walking" onclick="applyPose('walking', this)">
+                <span class="material-symbols-outlined">directions_walk</span>
+                <div>Caminando</div>
+            </button>
+            <button class="pose-btn" id="pose-running" onclick="applyPose('running', this)">
+                <span class="material-symbols-outlined">directions_run</span>
+                <div>Corriendo</div>
+            </button>
+            <button class="pose-btn" id="pose-sitting" onclick="applyPose('sitting', this)">
+                <span class="material-symbols-outlined">airline_seat_recline_normal</span>
+                <div>Sentado</div>
+            </button>
+            <button class="pose-btn" id="pose-crouching" onclick="applyPose('crouching', this)">
+                <span class="material-symbols-outlined">sports_gymnastics</span>
+                <div>Agachado</div>
+            </button>
+            <button class="pose-btn" id="pose-jumping" onclick="applyPose('jumping', this)">
+                <span class="material-symbols-outlined">rocket_launch</span>
+                <div>Saltando</div>
+            </button>
+            <button class="pose-btn" id="pose-action" onclick="applyPose('action', this)">
+                <span class="material-symbols-outlined">sports_martial_arts</span>
+                <div>Acción</div>
+            </button>
+            <button class="pose-btn" id="pose-relax" onclick="applyPose('relax', this)">
+                <span class="material-symbols-outlined">self_improvement</span>
+                <div>Descanso</div>
+            </button>
+        </div>
+    </div>
+    <!-- Load three.js and controls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    
+    <script>
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x353535);
+        scene.fog = new THREE.Fog(0x353535, 15, 40);
+
+        const canvasContainer = document.getElementById('canvas-container');
+        const camera = new THREE.PerspectiveCamera(45, canvasContainer.clientWidth/canvasContainer.clientHeight, 0.1, 100);
+        camera.position.set(0, 5, 14);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.setPixelRatio(window.devicePixelRatio);
+        canvasContainer.appendChild(renderer.domElement);
+
+        const orbit = new THREE.OrbitControls(camera, renderer.domElement);
+        orbit.target.set(0, 3, 0);
+        orbit.update();
+        orbit.enablePan = false;
+        orbit.maxDistance = 30;
+        orbit.minDistance = 5;
+
+        // Lights
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+        hemiLight.position.set(0, 20, 0);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        dirLight.shadow.camera.top = 10;
+        dirLight.shadow.camera.bottom = -10;
+        dirLight.shadow.camera.left = -10;
+        dirLight.shadow.camera.right = 10;
+        scene.add(dirLight);
+
+        const fillLight = new THREE.DirectionalLight(0x90b0d0, 0.3);
+        fillLight.position.set(-5, 3, -5);
+        scene.add(fillLight);
+
+        // Lighting UI Bindings
+        function bindSlider(idSlider, idNum, callback) {
+            const slider = document.getElementById(idSlider);
+            const num = document.getElementById(idNum);
+            slider.addEventListener('input', e => { num.value = e.target.value; callback(e.target.value); });
+            num.addEventListener('input', e => { slider.value = e.target.value; callback(e.target.value); });
+        }
+        
+        bindSlider('light-int', 'light-int-num', val => dirLight.intensity = val);
+        bindSlider('light-angx', 'light-angx-num', val => dirLight.position.x = val);
+        bindSlider('light-angz', 'light-angz-num', val => dirLight.position.z = val);
+        bindSlider('light-fill', 'light-fill-num', val => fillLight.intensity = val);
+        bindSlider('cam-fov', 'cam-fov-num', val => {
+            camera.fov = parseFloat(val);
+            camera.updateProjectionMatrix();
+        });
+        
+        document.getElementById('light-color').addEventListener('input', e => {
+            dirLight.color.set(e.target.value);
+        });
+
+        // Ground
+        const mesh = new THREE.Mesh( new THREE.PlaneGeometry( 100, 100 ), new THREE.MeshPhongMaterial( { color: 0x222222, depthWrite: false } ) );
+        mesh.rotation.x = - Math.PI / 2;
+        mesh.receiveShadow = true;
+        scene.add( mesh );
+
+        const grid = new THREE.GridHelper( 100, 100, 0x444444, 0x444444 );
+        grid.material.opacity = 0.5;
+        grid.material.transparent = true;
+        scene.add( grid );
+
+        // Mannequin Setup
+        const material = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.4, metalness: 0.2, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+        const jointMat = new THREE.MeshStandardMaterial({ color: 0x2B2930, roughness: 0.7, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+        const wireOverlayMaterial = new THREE.MeshBasicMaterial({ color: 0x007ACC, wireframe: true, transparent: true, opacity: 0.5 });
+
+        const parts = [];
+
+        function createPart(geom, yOffset) {
+            const mesh = new THREE.Mesh(geom, material);
+            mesh.position.y = yOffset;
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            
+            const wire = new THREE.Mesh(geom, wireOverlayMaterial);
+            wire.isWireOverlay = true;
+            wire.visible = false;
+            mesh.add(wire);
+            
+            return mesh;
+        }
+
+        function addJointVisual(group, yOffset, size) {
+            const geom = new THREE.SphereGeometry(size, 24, 24);
+            const joint = new THREE.Mesh(geom, jointMat);
+            joint.position.y = yOffset;
+            joint.castShadow = true;
+            
+            const wire = new THREE.Mesh(geom, wireOverlayMaterial);
+            wire.isWireOverlay = true;
+            wire.visible = false;
+            joint.add(wire);
+            
+            group.add(joint);
+        }
+
+        function createJointGroup(x, y, z) {
+            const group = new THREE.Group();
+            group.position.set(x, y, z);
+            return group;
+        }
+
+        // Base transform for the whole character
+        const charBase = new THREE.Group();
+        scene.add(charBase);
+
+        const torsoGroup = createJointGroup(0, 4.5, 0);
+        charBase.add(torsoGroup);
+        const torsoGeo = new THREE.CapsuleGeometry(0.65, 0.9, 16, 32);
+        const torso = createPart(torsoGeo, 0);
+        torsoGroup.add(torso);
+        parts.push({mesh: torso, group: torsoGroup}); // 0
+
+        // Neck & Head
+        const headGroup = createJointGroup(0, 1.1, 0);
+        torsoGroup.add(headGroup);
+        addJointVisual(headGroup, 0, 0.2); // Neck joint
+        const headGeo = new THREE.CapsuleGeometry(0.35, 0.45, 16, 32);
+        const head = createPart(headGeo, 0.6);
+        headGroup.add(head);
+        parts.push({mesh: head, group: headGroup}); // 1
+
+        // Arms
+        window.fingerParts = [];
+        function createArm(x, isLeft) {
+            const sign = isLeft ? -1 : 1;
+            const shoulder = createJointGroup(x * sign, 0.7, 0);
+            torsoGroup.add(shoulder);
+            addJointVisual(shoulder, 0, 0.28);
+            const upperArm = createPart(new THREE.CapsuleGeometry(0.2, 1.0, 16, 24), -0.7);
+            shoulder.add(upperArm);
+            parts.push({mesh: upperArm, group: shoulder}); // 2, 5
+
+            const elbow = createJointGroup(0, -1.4, 0);
+            shoulder.add(elbow);
+            addJointVisual(elbow, 0, 0.22);
+            const lowerArm = createPart(new THREE.CapsuleGeometry(0.18, 0.9, 16, 24), -0.63);
+            elbow.add(lowerArm);
+            parts.push({mesh: lowerArm, group: elbow}); // 3, 6
+            
+            const wrist = createJointGroup(0, -1.26, 0);
+            elbow.add(wrist);
+            addJointVisual(wrist, 0, 0.16);
+            
+            const palmGeo = new THREE.CapsuleGeometry(0.12, 0.15, 8, 16);
+            const palm = createPart(palmGeo, -0.15);
+            wrist.add(palm);
+            parts.push({mesh: palm, group: wrist}); // 4, 7
+
+            const fingers = {};
+            if (!isLeft) window.rightHandFingers = fingers;
+            else window.leftHandFingers = fingers;
+
+            function createFinger(name, fx, fy, fz, length, radius) {
+                const g1 = createJointGroup(fx, fy, fz);
+                wrist.add(g1);
+                const p1 = createPart(new THREE.CapsuleGeometry(radius, length*0.4, 8, 8), -length*0.2);
+                g1.add(p1);
+                
+                const g2 = createJointGroup(0, -length*0.4, 0);
+                g1.add(g2);
+                addJointVisual(g2, 0, radius*1.2);
+                const p2 = createPart(new THREE.CapsuleGeometry(radius*0.8, length*0.3, 8, 8), -length*0.15);
+                g2.add(p2);
+                
+                const g3 = createJointGroup(0, -length*0.3, 0);
+                g2.add(g3);
+                addJointVisual(g3, 0, radius);
+                const p3 = createPart(new THREE.CapsuleGeometry(radius*0.6, length*0.3, 8, 8), -length*0.15);
+                g3.add(p3);
+                
+                fingers[name] = [g1, g2, g3];
+                window.fingerParts.push({mesh: p1, group: g1}, {mesh: p2, group: g2}, {mesh: p3, group: g3});
+            }
+
+            createFinger('thumb', isLeft ? -0.12 : 0.12, -0.1, 0.1, 0.25, 0.04);
+            createFinger('index', isLeft ? -0.08 : 0.08, -0.28, 0, 0.35, 0.035);
+            createFinger('middle', 0, -0.3, 0, 0.4, 0.035);
+            createFinger('ring', isLeft ? 0.08 : -0.08, -0.28, 0, 0.35, 0.035);
+            createFinger('pinky', isLeft ? 0.12 : -0.12, -0.25, 0, 0.25, 0.03);
+        }
+        createArm(0.85, true);
+        createArm(0.85, false);
+
+        // Pelvis
+        const pelvisGroup = createJointGroup(0, -1.2, 0);
+        torsoGroup.add(pelvisGroup);
+        addJointVisual(pelvisGroup, 0, 0.35); // Spine base joint
+        const pGeo = new THREE.CapsuleGeometry(0.4, 0.6, 16, 32);
+        pGeo.rotateZ(Math.PI / 2);
+        const pelvis = createPart(pGeo, -0.2);
+        pelvisGroup.add(pelvis);
+        parts.push({mesh: pelvis, group: pelvisGroup}); // 8
+
+        // Legs
+        function createLeg(x, isLeft) {
+            const sign = isLeft ? -1 : 1;
+            const hip = createJointGroup(x * sign, -0.4, 0);
+            pelvisGroup.add(hip);
+            addJointVisual(hip, 0, 0.32);
+            const upperLeg = createPart(new THREE.CapsuleGeometry(0.28, 1.2, 16, 24), -0.88);
+            hip.add(upperLeg);
+            parts.push({mesh: upperLeg, group: hip}); // 9, 12
+
+            const knee = createJointGroup(0, -1.76, 0);
+            hip.add(knee);
+            addJointVisual(knee, 0, 0.26);
+            const lowerLeg = createPart(new THREE.CapsuleGeometry(0.22, 1.1, 16, 24), -0.77);
+            knee.add(lowerLeg);
+            parts.push({mesh: lowerLeg, group: knee}); // 10, 13
+            
+            const ankle = createJointGroup(0, -1.54, 0);
+            knee.add(ankle);
+            addJointVisual(ankle, 0, 0.2);
+            const fGeo = new THREE.CapsuleGeometry(0.18, 0.4, 16, 24);
+            fGeo.rotateX(Math.PI / 2);
+            const foot = createPart(fGeo, -0.2);
+            foot.position.z = 0.2;
+            ankle.add(foot);
+            parts.push({mesh: foot, group: ankle}); // 11, 14
+        }
+        createLeg(0.45, true);
+        createLeg(0.45, false);
+
+        parts.push(...window.fingerParts);
+
+        // Interaction
+        const transformControl = new THREE.TransformControls(camera, renderer.domElement);
+        transformControl.size = 1.2;
+        transformControl.addEventListener('dragging-changed', function (event) {
+            const mannequinLayer = layers.find(l => l.type === 'mannequin');
+            if (mannequinLayer && mannequinLayer.locked) {
+                orbit.enabled = false;
+            } else {
+                orbit.enabled = !event.value;
+            }
+        });
+        scene.add(transformControl);
+        transformControl.setMode('rotate');
+        transformControl.setSpace('local');
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        renderer.domElement.addEventListener('pointerdown', onPointerDown, false);
+
+        function onPointerDown(event) {
+            const mannequinLayer = layers.find(l => l.type === 'mannequin');
+            if (mannequinLayer && mannequinLayer.locked) return; // Disallow selection if locked
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            
+            if (transformControl.axis !== null) return;
+
+            if (window.customModel && charBase.visible === false) {
+                const intersects = raycaster.intersectObjects(window.customInteractables || [], true);
+                if (intersects.length > 0) {
+                    transformControl.attach(window.customModel);
+                } else {
+                    transformControl.detach();
+                }
+            } else {
+                const interactables = parts.map(p => p.mesh);
+                const intersects = raycaster.intersectObjects(interactables);
+
+                if (intersects.length > 0) {
+                    const object = intersects[0].object;
+                    const part = parts.find(p => p.mesh === object);
+                    if (part) {
+                        transformControl.attach(part.group);
+                    }
+                } else {
+                    transformControl.detach();
+                }
+            }
+        }
+
+        function setToolMode(mode) {
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('tool-' + mode).classList.add('active');
+            
+            const is3DMode = ['rotate', 'translate', 'scale'].includes(mode);
+            const mannequinLayer = layers.find(l => l.type === 'mannequin');
+            const isMannequinLocked = mannequinLayer && mannequinLayer.locked;
+            
+            if (is3DMode) {
+                document.getElementById('interaction-overlay').style.pointerEvents = 'none';
+                transformControl.setMode(mode);
+                transformControl.setSpace(mode === 'scale' ? 'local' : (mode === 'translate' ? 'world' : 'local'));
+                
+                if (isMannequinLocked) {
+                    transformControl.detach();
+                    if (typeof orbit !== 'undefined') orbit.enabled = false;
+                } else {
+                    if (typeof orbit !== 'undefined') orbit.enabled = true;
+                    if (mode === 'translate' || mode === 'scale') {
+                        transformControl.attach(window.customModel && !charBase.visible ? window.customModel : charBase);
+                    } else if (transformControl.object === charBase || transformControl.object === window.customModel) {
+                        transformControl.detach();
+                    }
+                }
+            } else {
+                // Drawing mode
+                document.getElementById('interaction-overlay').style.pointerEvents = 'auto';
+                drawMode = mode;
+                transformControl.detach();
+            }
+        }
+
+        document.getElementById('file-input').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const url = URL.createObjectURL(file);
+            const ext = file.name.split('.').pop().toLowerCase();
+            
+            document.getElementById('loading-overlay').style.display = 'flex';
+            
+            const onLoad = function(object) {
+                let model = object.scene || object;
+                if (window.customModel) scene.remove(window.customModel);
+                
+                charBase.visible = false;
+                
+                const box = new THREE.Box3().setFromObject(model);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 5 / maxDim;
+                
+                model.scale.set(scale, scale, scale);
+                model.position.sub(center.multiplyScalar(scale));
+                model.position.y += (size.y * scale) / 2;
+                
+                const interactables = [];
+                model.traverse(function(child) {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        
+                        const wire = new THREE.Mesh(child.geometry, wireOverlayMaterial);
+                        wire.isWireOverlay = true;
+                        wire.visible = (renderMode === 1);
+                        child.add(wire);
+                        
+                        if (child.material) {
+                            if (Array.isArray(child.material)) {
+                                child.material.forEach(m => {
+                                    m.wireframe = (renderMode === 2);
+                                    m.polygonOffset = true; m.polygonOffsetFactor = 1; m.polygonOffsetUnits = 1;
+                                });
+                            } else {
+                                child.material.wireframe = (renderMode === 2);
+                                child.material.polygonOffset = true; child.material.polygonOffsetFactor = 1; child.material.polygonOffsetUnits = 1;
+                            }
+                        }
+                        interactables.push(child);
+                    }
+                });
+                
+                scene.add(model);
+                window.customModel = model;
+                window.customInteractables = interactables;
+                transformControl.detach();
+                document.getElementById('loading-overlay').style.display = 'none';
+            };
+            
+            const onError = function(e) {
+                console.error(e);
+                alert("Error cargando modelo. Asegúrate que incluye sus texturas (usa .glb preferiblemente).");
+                document.getElementById('loading-overlay').style.display = 'none';
+            };
+            
+            if (ext === 'glb' || ext === 'gltf') {
+                new THREE.GLTFLoader().load(url, onLoad, undefined, onError);
+            } else if (ext === 'obj') {
+                new THREE.OBJLoader().load(url, onLoad, undefined, onError);
+            } else if (ext === 'fbx') {
+                new THREE.FBXLoader().load(url, onLoad, undefined, onError);
+            } else {
+                alert("Formato no soportado. Usa GLB, GLTF, OBJ o FBX.");
+                document.getElementById('loading-overlay').style.display = 'none';
+            }
+        });
+
+        function applyPose(poseName, element) {
+            document.querySelectorAll('.pose-btn').forEach(btn => btn.classList.remove('active'));
+            if (element) element.classList.add('active');
+
+            parts.forEach(p => p.group.rotation.set(0,0,0));
+            torsoGroup.position.set(0, 4.5, 0);
+            pelvisGroup.rotation.set(0,0,0);
+            charBase.position.set(0,0,0);
+            charBase.rotation.set(0,0,0);
+            transformControl.detach();
+            setToolMode('rotate');
+            
+            if (poseName === 'standing') {
+                // Default pose
+            } else if (poseName === 'walking') {
+                parts[9].group.rotation.x = -0.4;
+                parts[10].group.rotation.x = 0.2;
+                parts[12].group.rotation.x = 0.3;
+                parts[13].group.rotation.x = 0.1;
+                parts[5].group.rotation.x = -0.4;
+                parts[6].group.rotation.x = -0.1;
+                parts[2].group.rotation.x = 0.4;
+                parts[3].group.rotation.x = -0.1;
+                torsoGroup.rotation.x = 0.1;
+            } else if (poseName === 'running') {
+                parts[9].group.rotation.x = -0.8;
+                parts[10].group.rotation.x = 0.8;
+                parts[12].group.rotation.x = 0.5;
+                parts[13].group.rotation.x = 0.3;
+                parts[5].group.rotation.x = -0.8;
+                parts[6].group.rotation.x = -0.5;
+                parts[2].group.rotation.x = 0.6;
+                parts[3].group.rotation.x = -0.2;
+                torsoGroup.rotation.x = 0.2;
+                parts[1].group.rotation.x = -0.1;
+            } else if (poseName === 'sitting') {
+                torsoGroup.position.y = 2.4;
+                parts[9].group.rotation.x = -1.5;
+                parts[12].group.rotation.x = -1.5;
+                parts[10].group.rotation.x = 1.5;
+                parts[13].group.rotation.x = 1.5;
+                parts[2].group.rotation.set(-0.2, 0, 0.2);
+                parts[3].group.rotation.x = -0.8;
+                parts[5].group.rotation.set(-0.2, 0, -0.2);
+                parts[6].group.rotation.x = -0.8;
+            } else if (poseName === 'crouching') {
+                torsoGroup.position.y = 1.8;
+                torsoGroup.rotation.x = 0.5;
+                parts[9].group.rotation.x = -1.2;
+                parts[10].group.rotation.x = 2.0;
+                parts[12].group.rotation.x = -1.2;
+                parts[13].group.rotation.x = 2.0;
+                parts[2].group.rotation.x = -0.5;
+                parts[5].group.rotation.x = -0.5;
+                parts[3].group.rotation.x = -0.5;
+                parts[6].group.rotation.x = -0.5;
+                parts[1].group.rotation.x = -0.3;
+            } else if (poseName === 'jumping') {
+                torsoGroup.position.y = 6.5;
+                torsoGroup.rotation.x = 0.3;
+                parts[9].group.rotation.x = -0.4;
+                parts[10].group.rotation.x = 1.0;
+                parts[12].group.rotation.x = 0.2;
+                parts[13].group.rotation.x = 0.2;
+                parts[2].group.rotation.z = 2.5;
+                parts[5].group.rotation.z = -2.5;
+                parts[3].group.rotation.x = -0.2;
+                parts[6].group.rotation.x = -0.2;
+            } else if (poseName === 'action') {
+                torsoGroup.position.y = 3.5;
+                parts[9].group.rotation.set(-0.2, 0.2, 0.4);
+                parts[10].group.rotation.x = 0.5;
+                parts[12].group.rotation.set(-0.4, -0.2, -0.4);
+                parts[13].group.rotation.x = 0.8;
+                parts[2].group.rotation.set(-0.8, -0.5, 0.4);
+                parts[3].group.rotation.x = -1.2;
+                parts[5].group.rotation.set(0.2, 0, -0.2);
+                parts[6].group.rotation.x = -0.5;
+                torsoGroup.rotation.y = -0.3;
+                parts[1].group.rotation.y = 0.4;
+            }
+        }
+
+        function resetPose() {
+            if (window.customModel) {
+                scene.remove(window.customModel);
+                window.customModel = null;
+                charBase.visible = true;
+                transformControl.detach();
+            }
+            applyPose('standing', document.getElementById('pose-standing'));
+            orbit.target.set(0, 3, 0);
+            camera.position.set(0, 5, 14);
+            orbit.update();
+        }
+
+        let renderMode = 0; // 0: Solid, 1: Topology, 2: X-Ray
+
+        function toggleWireframe() {
+            renderMode = (renderMode + 1) % 3;
+            const btn = document.getElementById('btn-wireframe');
+            
+            if (renderMode === 0) {
+                btn.innerText = 'Modo: Sólido (Render)';
+                material.wireframe = false;
+                jointMat.wireframe = false;
+                charBase.traverse(child => { if (child.isWireOverlay) child.visible = false; });
+            } else if (renderMode === 1) {
+                btn.innerText = 'Modo: Topología (Guías)';
+                material.wireframe = false;
+                jointMat.wireframe = false;
+                charBase.traverse(child => { if (child.isWireOverlay) child.visible = true; });
+            } else {
+                btn.innerText = 'Modo: Rayos X (Alambre)';
+                material.wireframe = true;
+                jointMat.wireframe = true;
+                charBase.traverse(child => { if (child.isWireOverlay) child.visible = false; });
+            }
+            
+            if (window.customModel) {
+                window.customModel.traverse(function(child) {
+                    if (child.isMesh && child.material && !child.isWireOverlay) {
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach(m => { m.wireframe = (renderMode === 2); });
+                        } else {
+                            child.material.wireframe = (renderMode === 2);
+                        }
+                    }
+                    if (child.isWireOverlay) {
+                        child.visible = (renderMode === 1);
+                    }
+                });
+            }
+        }
+
+        window.addEventListener('resize', onWindowResize, false);
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+
+            // Resize all layer canvases while preserving image
+            layers.forEach(l => {
+                const tempImg = new Image();
+                tempImg.src = l.canvas.toDataURL();
+                l.canvas.width = container.clientWidth;
+                l.canvas.height = container.clientHeight;
+                tempImg.onload = () => {
+                    l.ctx.drawImage(tempImg, 0, 0);
+                }
+            });
+        }
+
+        // MediaPipe Hand Tracking
+        let handTracker = null;
+        let cameraMP = null;
+        let isTracking = false;
+
+        function toggleHandTracking() {
+            const videoElement = document.getElementById('input_video');
+            if (isTracking) {
+                isTracking = false;
+                if(cameraMP) cameraMP.stop();
+                videoElement.style.display = 'none';
+                return;
+            }
+            
+            document.getElementById('loading-overlay').style.display = 'flex';
+            document.getElementById('loading-text').innerText = "Iniciando Cámara...";
+
+            if (!handTracker) {
+                handTracker = new Hands({locateFile: (file) => {
+                    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+                }});
+                handTracker.setOptions({
+                    maxNumHands: 2,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+                handTracker.onResults(onHandResults);
+            }
+
+            cameraMP = new Camera(videoElement, {
+                onFrame: async () => {
+                    await handTracker.send({image: videoElement});
+                },
+                width: 480,
+                height: 360
+            });
+            cameraMP.start().then(() => {
+                isTracking = true;
+                videoElement.style.display = 'block';
+                document.getElementById('loading-overlay').style.display = 'none';
+            }).catch(err => {
+                console.error(err);
+                alert("Error al iniciar la cámara. Verifica los permisos.");
+                document.getElementById('loading-overlay').style.display = 'none';
+            });
+        }
+
+        function calculateAngle(p1, p2, p3) {
+            const v1 = new THREE.Vector3(p1.x - p2.x, p1.y - p2.y, p1.z - p2.z).normalize();
+            const v2 = new THREE.Vector3(p3.x - p2.x, p3.y - p2.y, p3.z - p2.z).normalize();
+            return Math.PI - v1.angleTo(v2);
+        }
+
+        function onHandResults(results) {
+            if (results.multiHandLandmarks && results.multiHandedness) {
+                for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+                    const landmarks = results.multiHandLandmarks[i];
+                    // Handedness in camera is usually mirrored. Right in image is Left hand.
+                    const isLeft = results.multiHandedness[i].label === 'Right';
+                    const fingersObj = isLeft ? window.leftHandFingers : window.rightHandFingers;
+
+                    if(!fingersObj) continue;
+
+                    applyCurl(fingersObj.thumb, landmarks, 0, 1, 2, 3, 4, true, isLeft);
+                    applyCurl(fingersObj.index, landmarks, 0, 5, 6, 7, 8, false, isLeft);
+                    applyCurl(fingersObj.middle, landmarks, 0, 9, 10, 11, 12, false, isLeft);
+                    applyCurl(fingersObj.ring, landmarks, 0, 13, 14, 15, 16, false, isLeft);
+                    applyCurl(fingersObj.pinky, landmarks, 0, 17, 18, 19, 20, false, isLeft);
+                }
+            }
+        }
+
+        function applyCurl(fingerGroups, lm, root, b, j1, j2, tip, isThumb, isLeft) {
+            if(!fingerGroups) return;
+            let a1 = calculateAngle(lm[root], lm[b], lm[j1]);
+            let a2 = calculateAngle(lm[b], lm[j1], lm[j2]);
+            let a3 = calculateAngle(lm[j1], lm[j2], lm[tip]);
+
+            // Clamp angles to prevent backward bending
+            a1 = Math.max(0, Math.min(a1, Math.PI/1.5));
+            a2 = Math.max(0, Math.min(a2, Math.PI/1.5));
+            a3 = Math.max(0, Math.min(a3, Math.PI/1.5));
+
+            if(isThumb) {
+                const sign = isLeft ? -1 : 1;
+                fingerGroups[0].rotation.z = a1 * 1.2 * sign;
+                fingerGroups[1].rotation.z = a2 * 1.2 * sign;
+                fingerGroups[2].rotation.z = a3 * 1.2 * sign;
+            } else {
+                fingerGroups[0].rotation.x = -a1 * 1.2;
+                fingerGroups[1].rotation.x = -a2 * 1.2;
+                fingerGroups[2].rotation.x = -a3 * 1.2;
+            }
+        }
+
+        // --- Timelapse DB Logic (IndexedDB) ---
+        let idb;
+        const idbReq = indexedDB.open("MannequinDB", 1);
+        idbReq.onupgradeneeded = e => {
+            idb = e.target.result;
+            if (!idb.objectStoreNames.contains('snapshots')) {
+                idb.createObjectStore('snapshots');
+            }
+        };
+        idbReq.onsuccess = e => idb = e.target.result;
+
+        function saveSnapshot() {
+            if (!idb || currentProjectId <= 0) return;
+            const cArea = document.querySelector('.canvas-area');
+            if (!cArea) return;
+            
+            const tempCanvas = document.createElement('canvas');
+            const scale = Math.min(1, 640 / Math.max(cArea.clientWidth, cArea.clientHeight));
+            tempCanvas.width = cArea.clientWidth * scale;
+            tempCanvas.height = cArea.clientHeight * scale;
+            const ctx = tempCanvas.getContext('2d');
+            
+            ctx.fillStyle = '#1C1B1F';
+            ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            
+            for (let l of layers) {
+                if (!l.visible) continue;
+                ctx.globalAlpha = l.opacity;
+                if (l.type === 'draw') {
+                    ctx.drawImage(l.canvas, 0, 0, tempCanvas.width, tempCanvas.height);
+                } else if (l.type === 'mannequin') {
+                    ctx.drawImage(renderer.domElement, 0, 0, tempCanvas.width, tempCanvas.height);
+                }
+            }
+            
+            const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.6);
+            
+            const tx = idb.transaction('snapshots', 'readwrite');
+            const store = tx.objectStore('snapshots');
+            store.get(currentProjectId).onsuccess = e => {
+                let arr = e.target.result || [];
+                arr.push(dataUrl);
+                store.put(arr, currentProjectId);
+            };
+        }
+
+        function exportTimelapse() {
+            if (!idb || currentProjectId <= 0) return;
+            
+            document.getElementById('loading-overlay').style.display = 'flex';
+            document.getElementById('loading-text').innerText = 'Generando Timelapse...';
+            
+            const tx = idb.transaction('snapshots', 'readonly');
+            const store = tx.objectStore('snapshots');
+            store.get(currentProjectId).onsuccess = e => {
+                const arr = e.target.result || [];
+                if (arr.length === 0) {
+                    alert("Aún no hay suficientes trazos en este lienzo para generar un video.");
+                    document.getElementById('loading-overlay').style.display = 'none';
+                    return;
+                }
+                
+                if (!window.AndroidApp || !window.AndroidApp.startVideoExport()) {
+                    alert("Error al iniciar la exportación de video.");
+                    document.getElementById('loading-overlay').style.display = 'none';
+                    return;
+                }
+                
+                const canvas = document.createElement('canvas');
+                let firstImg = new Image();
+                firstImg.onload = () => {
+                    canvas.width = firstImg.width;
+                    canvas.height = firstImg.height;
+                    const ctx = canvas.getContext('2d');
+                    
+                    const stream = canvas.captureStream(15);
+                    const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+                    
+                    recorder.ondataavailable = ev => {
+                        if (ev.data.size > 0) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                                window.AndroidApp.appendVideoData(reader.result.split(',')[1]);
+                            };
+                            reader.readAsDataURL(ev.data);
+                        }
+                    };
+                    
+                    recorder.onstop = () => {
+                        setTimeout(() => {
+                            window.AndroidApp.finishVideoExport();
+                            document.getElementById('loading-overlay').style.display = 'none';
+                        }, 1000);
+                    };
+                    
+                    recorder.start(1000); // 1-second chunks
+                    
+                    let frameIdx = 0;
+                    const drawFrame = () => {
+                        if (frameIdx >= arr.length) {
+                            setTimeout(() => recorder.stop(), 2000); // Wait on last frame
+                            return;
+                        }
+                        let img = new Image();
+                        img.onload = () => {
+                            ctx.drawImage(img, 0, 0);
+                            frameIdx++;
+                            setTimeout(drawFrame, 1000 / 15);
+                        };
+                        img.src = arr[frameIdx];
+                    };
+                    drawFrame();
+                };
+                firstImg.src = arr[0];
+            };
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        let currentProjectId = 0;
+        let currentProjectName = "Boceto sin título";
+
+        // --- Drawing App Logic (S-Pen & Canvas Layers) ---
+        const drawContainer = document.getElementById('drawing-layers-container');
+        let layers = [];
+        let activeLayerIndex = -1;
+        let layerCount = 0;
+        
+        let isDrawing = false;
+        let drawX = 0, drawY = 0, drawP = 0;
+        let lastX = 0; let lastY = 0;
+        let brushColor = '#007ACC';
+        let brushSize = 5;
+        let drawMode = 'brush';
+        let visibilityMode = 0;
+        let activeBrushPreset = 'gpen';
+
+        const brushPresets = {
+            gpen: {
+                pressureCurve: p => p,
+                render: (ctx, x, y, lx, ly, size) => {
+                    ctx.globalAlpha = 1.0;
+                    ctx.lineWidth = size;
+                    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke();
+                }
+            },
+            pencil: {
+                pressureCurve: p => 0.3 + (p * 0.7),
+                render: (ctx, x, y, lx, ly, size) => {
+                    ctx.globalAlpha = 0.6;
+                    ctx.lineWidth = size * 0.8;
+                    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke();
+                }
+            },
+            charcoal: {
+                pressureCurve: p => 0.5 + (p * 0.5),
+                render: (ctx, x, y, lx, ly, size) => {
+                    ctx.globalAlpha = 0.2;
+                    ctx.lineWidth = size * 1.5;
+                    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke();
+                    
+                    ctx.globalAlpha = 0.5;
+                    ctx.lineWidth = size * 0.8;
+                    ctx.beginPath(); ctx.moveTo(lx + 0.5, ly + 0.5); ctx.lineTo(x + 0.5, y + 0.5); ctx.stroke();
+                    
+                    if (Math.random() > 0.5) {
+                        ctx.globalAlpha = 0.6;
+                        let rx = x + (Math.random() - 0.5) * size;
+                        let ry = y + (Math.random() - 0.5) * size;
+                        ctx.beginPath(); ctx.arc(rx, ry, size * 0.1, 0, Math.PI*2); ctx.fill();
+                    }
+                }
+            },
+            airbrush: {
+                pressureCurve: p => p * p,
+                render: (ctx, x, y, lx, ly, size) => {
+                    ctx.globalAlpha = 0.05;
+                    for (let i = 0; i < 5; i++) {
+                        ctx.lineWidth = size * (1 + i * 0.5);
+                        ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke();
+                    }
+                }
+            },
+            marker: {
+                pressureCurve: p => 0.8 + (p * 0.2),
+                render: (ctx, x, y, lx, ly, size) => {
+                    ctx.globalAlpha = 0.8;
+                    ctx.lineWidth = size;
+                    ctx.lineCap = 'square';
+                    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke();
+                    ctx.lineCap = 'round'; // reset
+                }
+            },
+            water: {
+                pressureCurve: p => p,
+                render: (ctx, x, y, lx, ly, size) => {
+                    ctx.globalAlpha = 0.15;
+                    ctx.lineWidth = size * 1.2;
+                    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke();
+                    ctx.lineWidth = size * 0.6;
+                    ctx.globalAlpha = 0.3;
+                    ctx.beginPath(); ctx.moveTo(lx, ly); ctx.lineTo(x, y); ctx.stroke();
+                }
+            }
+        };
+
+        function setBrushPreset(preset) {
+            activeBrushPreset = preset;
+            const btnIds = ['gpen', 'pencil', 'charcoal', 'airbrush', 'marker', 'water'];
+            btnIds.forEach(id => {
+                const btn = document.getElementById('btn-brush-' + id);
+                if (btn) btn.classList.remove('active');
+            });
+            const activeBtn = document.getElementById('btn-brush-' + preset);
+            if (activeBtn) activeBtn.classList.add('active');
+            if (drawMode === 'eraser') {
+                setToolMode('brush');
+            }
+        }
+
+        function addLayer(name = null) {
+            layerCount++;
+            const canvas = document.createElement('canvas');
+            const cArea = document.querySelector('.canvas-area');
+            canvas.width = cArea.clientWidth;
+            canvas.height = cArea.clientHeight;
+            drawContainer.appendChild(canvas);
+            
+            const layer = {
+                id: 'layer-' + layerCount,
+                name: name || ('Capa ' + layerCount),
+                canvas: canvas,
+                ctx: canvas.getContext('2d', { willReadFrequently: true }),
+                visible: true,
+                locked: false,
+                opacity: 1.0
+            };
+            layers.push(layer);
+            activeLayerIndex = layers.length - 1;
+            renderLayersUI();
+        }
+
+        function handleImageImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    addLayer('Referencia ' + file.name.substring(0, 10));
+                    const l = layers[layers.length - 1];
+                    const ctx = l.ctx;
+                    const canvas = l.canvas;
+
+                    // Calculate scale to fit proportionally
+                    const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+                    const w = img.width * scale;
+                    const h = img.height * scale;
+                    const x = (canvas.width - w) / 2;
+                    const y = (canvas.height - h) / 2;
+
+                    ctx.drawImage(img, x, y, w, h);
+                    
+                    // Reset input
+                    event.target.value = '';
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function updateLayerZIndices() {
+            layers.forEach((l, i) => {
+                let el = null;
+                if (l.type === 'draw') el = l.canvas;
+                else if (l.type === 'mannequin') el = document.getElementById('canvas-container');
+                else if (l.type === 'grid') el = document.getElementById('grid-overlay');
+                
+                if (el) {
+                    el.style.zIndex = i + 1;
+                }
+            });
+        }
+
+        function moveLayer(index, dir) {
+            if (dir === 1 && index < layers.length - 1) {
+                const temp = layers[index];
+                layers[index] = layers[index + 1];
+                layers[index + 1] = temp;
+                if (activeLayerIndex === index) activeLayerIndex = index + 1;
+                else if (activeLayerIndex === index + 1) activeLayerIndex = index;
+            } else if (dir === -1 && index > 0) {
+                const temp = layers[index];
+                layers[index] = layers[index - 1];
+                layers[index - 1] = temp;
+                if (activeLayerIndex === index) activeLayerIndex = index - 1;
+                else if (activeLayerIndex === index - 1) activeLayerIndex = index;
+            }
+            updateLayerZIndices();
+            renderLayersUI();
+        }
+
+        function renderLayersUI() {
+            const list = document.getElementById('layers-list');
+            list.innerHTML = '';
+            // Render from top to bottom (reverse array)
+            for (let i = layers.length - 1; i >= 0; i--) {
+                const l = layers[i];
+                const div = document.createElement('div');
+                div.className = 'layer-item' + (i === activeLayerIndex ? ' active' : '');
+                div.onclick = (e) => {
+                    if (e.target.tagName !== 'SPAN' && e.target.tagName !== 'INPUT' && l.type === 'draw') {
+                        activeLayerIndex = i;
+                        renderLayersUI();
+                    }
+                };
+
+                const visBtn = document.createElement('span');
+                visBtn.className = 'material-symbols-outlined';
+                visBtn.innerText = l.visible ? 'visibility' : 'visibility_off';
+                visBtn.title = 'Visibilidad';
+                visBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    l.visible = !l.visible;
+                    if (l.type === 'draw') l.canvas.style.display = l.visible ? 'block' : 'none';
+                    else if (l.type === 'mannequin') document.getElementById('canvas-container').style.display = l.visible ? 'flex' : 'none';
+                    else if (l.type === 'grid') document.getElementById('grid-overlay').style.display = l.visible ? 'block' : 'none';
+                    renderLayersUI();
+                };
+
+                const lockBtn = document.createElement('span');
+                lockBtn.className = 'material-symbols-outlined';
+                lockBtn.innerText = l.locked ? 'lock' : 'lock_open';
+                lockBtn.title = 'Bloquear';
+                lockBtn.style.visibility = l.type === 'grid' ? 'hidden' : 'visible'; // Grid can't be locked, mannequin and draw can
+                lockBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    l.locked = !l.locked;
+                    
+                    if (l.type === 'mannequin') {
+                        if (l.locked) {
+                            transformControl.detach();
+                            if (typeof orbit !== 'undefined') orbit.enabled = false;
+                        } else {
+                            if (typeof orbit !== 'undefined') orbit.enabled = true;
+                        }
+                    }
+                    
+                    renderLayersUI();
+                };
+
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'layer-name';
+                nameDiv.innerText = l.name;
+
+                const opac = document.createElement('input');
+                opac.type = 'range';
+                opac.className = 'layer-opacity';
+                opac.min = 0; opac.max = 100; opac.value = l.opacity * 100;
+                opac.title = 'Opacidad';
+                opac.oninput = (e) => {
+                    l.opacity = e.target.value / 100;
+                    if (l.type === 'draw') l.canvas.style.opacity = l.opacity;
+                    else if (l.type === 'mannequin') document.getElementById('canvas-container').style.opacity = l.opacity;
+                    else if (l.type === 'grid') document.getElementById('grid-overlay').style.opacity = l.opacity;
+                };
+
+                const upBtn = document.createElement('span');
+                upBtn.className = 'material-symbols-outlined';
+                upBtn.innerText = 'arrow_upward';
+                upBtn.style.fontSize = '14px';
+                upBtn.title = 'Mover Arriba';
+                upBtn.onclick = (e) => { e.stopPropagation(); moveLayer(i, 1); };
+
+                const downBtn = document.createElement('span');
+                downBtn.className = 'material-symbols-outlined';
+                downBtn.innerText = 'arrow_downward';
+                downBtn.style.fontSize = '14px';
+                downBtn.title = 'Mover Abajo';
+                downBtn.onclick = (e) => { e.stopPropagation(); moveLayer(i, -1); };
+
+                div.appendChild(visBtn);
+                if (l.type === 'draw') div.appendChild(lockBtn);
+                div.appendChild(nameDiv);
+                div.appendChild(opac);
+                div.appendChild(upBtn);
+                div.appendChild(downBtn);
+                list.appendChild(div);
+            }
+        }
+
+        function initDrawCanvas(projectIdToLoad = 0) {
+            // Clean existing
+            drawContainer.innerHTML = '';
+            layers = [];
+            activeLayerIndex = -1;
+            layerCount = 0;
+            currentProjectId = projectIdToLoad;
+            
+            let loaded = false;
+            if (window.AndroidApp && currentProjectId > 0) {
+                const json = window.AndroidApp.loadState(currentProjectId);
+                if (json) {
+                    try {
+                        const state = JSON.parse(json);
+                        if (state.layers && state.layers.length > 0) {
+                            state.layers.forEach(lData => {
+                                if (lData.type === 'mannequin') {
+                                    layers.push({
+                                        id: 'mannequin', name: lData.name || 'Modelo 3D', type: 'mannequin',
+                                        visible: lData.visible !== false, locked: lData.locked || false, opacity: lData.opacity ?? 1.0
+                                    });
+                                    document.getElementById('canvas-container').style.opacity = (lData.opacity ?? 1.0);
+                                    document.getElementById('canvas-container').style.display = lData.visible === false ? 'none' : 'flex';
+                                } else if (lData.type === 'grid') {
+                                    layers.push({
+                                        id: 'grid', name: lData.name || 'Guías', type: 'grid',
+                                        visible: lData.visible !== false, locked: lData.locked !== false, opacity: lData.opacity ?? 0.5
+                                    });
+                                    document.getElementById('grid-overlay').style.opacity = lData.opacity ?? 0.5;
+                                    document.getElementById('grid-overlay').style.display = lData.visible === false ? 'none' : 'block';
+                                } else {
+                                    layerCount++;
+                                    const canvas = document.createElement('canvas');
+                                    const cArea = document.querySelector('.canvas-area');
+                                    canvas.width = cArea.clientWidth || 800;
+                                    canvas.height = cArea.clientHeight || 600;
+                                    drawContainer.appendChild(canvas);
+                                    
+                                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                                    const img = new Image();
+                                    img.onload = () => ctx.drawImage(img, 0, 0);
+                                    if (lData.data) img.src = lData.data;
+                                    
+                                    const layer = {
+                                        id: 'layer-' + layerCount,
+                                        name: lData.name,
+                                        type: 'draw',
+                                        canvas: canvas,
+                                        ctx: ctx,
+                                        visible: lData.visible,
+                                        locked: lData.locked,
+                                        opacity: lData.opacity
+                                    };
+                                    canvas.style.display = layer.visible ? 'block' : 'none';
+                                    canvas.style.opacity = layer.opacity;
+                                    layers.push(layer);
+                                }
+                            });
+                            
+                            // Add mannequin/grid if missing (from legacy saves)
+                            if (!layers.find(l => l.type === 'mannequin')) {
+                                layers.unshift({ id: 'mannequin', name: 'Modelo 3D', type: 'mannequin', visible: true, locked: true, opacity: 1.0 });
+                            }
+                            if (!layers.find(l => l.type === 'grid')) {
+                                layers.push({ id: 'grid', name: 'Guías', type: 'grid', visible: true, locked: true, opacity: 0.5 });
+                                document.getElementById('grid-overlay').style.opacity = 0.5;
+                            }
+                            
+                            activeLayerIndex = -1;
+                            for (let i = layers.length - 1; i >= 0; i--) {
+                                if (layers[i].type === 'draw') { activeLayerIndex = i; break; }
+                            }
+                            if (activeLayerIndex === -1) activeLayerIndex = 0;
+                            
+                            updateLayerZIndices();
+                            renderLayersUI();
+                            loaded = true;
+                        }
+                        
+                        // Load pose
+                        if (state.pose) {
+                            if (state.pose.charBase && charBase) {
+                                charBase.position.fromArray(state.pose.charBase.p);
+                                charBase.rotation.fromArray(state.pose.charBase.r);
+                            }
+                            if (state.pose.torsoGroup && torsoGroup) {
+                                torsoGroup.position.fromArray(state.pose.torsoGroup.p);
+                                torsoGroup.rotation.fromArray(state.pose.torsoGroup.r);
+                            }
+                            if (state.pose.pelvisGroup && pelvisGroup) {
+                                pelvisGroup.rotation.fromArray(state.pose.pelvisGroup.r);
+                            }
+                            if (state.pose.parts && state.pose.parts.length === parts.length) {
+                                for (let i = 0; i < parts.length; i++) {
+                                    parts[i].group.rotation.fromArray(state.pose.parts[i]);
+                                }
+                            }
+                        }
+                        
+                        if (state.camera) {
+                            camera.fov = state.camera.fov;
+                            camera.updateProjectionMatrix();
+                            document.getElementById('cam-fov').value = camera.fov;
+                            document.getElementById('cam-fov-num').value = camera.fov;
+                        }
+                    } catch (e) {
+                        console.error("Error loading state from Android", e);
+                    }
+                }
+            }
+
+            if (!loaded) {
+                resetPose();
+                layers.push({ id: 'mannequin', name: 'Modelo 3D', type: 'mannequin', visible: true, locked: true, opacity: 1.0 });
+                addLayer('Fondo / Piel');
+                addLayer('Boceto');
+                layers.push({ id: 'grid', name: 'Guías', type: 'grid', visible: true, locked: true, opacity: 0.5 });
+                document.getElementById('grid-overlay').style.opacity = 0.5;
+                
+                activeLayerIndex = 2; // Boceto
+                updateLayerZIndices();
+                renderLayersUI();
+            }
+        }
+
+        // Auto-save mechanism
+        setInterval(() => {
+            if (window.AndroidApp && currentProjectId > 0) {
+                const layersData = layers.map(l => {
+                    return {
+                        type: l.type,
+                        name: l.name,
+                        visible: l.visible,
+                        locked: l.locked,
+                        opacity: l.opacity,
+                        data: l.type === 'draw' ? l.canvas.toDataURL() : null
+                    };
+                });
+                
+                const poseData = {
+                    charBase: { p: charBase.position.toArray(), r: charBase.rotation.toArray() },
+                    torsoGroup: { p: torsoGroup.position.toArray(), r: torsoGroup.rotation.toArray() },
+                    pelvisGroup: { r: pelvisGroup.rotation.toArray() },
+                    parts: parts.map(p => p.group.rotation.toArray())
+                };
+
+                const state = {
+                    layers: layersData,
+                    pose: poseData,
+                    camera: { fov: camera.fov }
+                };
+                
+                let thumbData = "";
+                const topDraw = layers.slice().reverse().find(l => l.type === 'draw');
+                if (topDraw) {
+                    thumbData = topDraw.canvas.toDataURL("image/png");
+                }
+                
+                currentProjectId = window.AndroidApp.saveProject(currentProjectId, currentProjectName, thumbData, JSON.stringify(state));
+            }
+        }, 5000);
+
+        // --- Gallery UI Logic ---
+        function openGallery() {
+            document.getElementById('gallery-ui').style.display = 'flex';
+            if (window.AndroidApp) {
+                try {
+                    const projectsJson = window.AndroidApp.getAllProjects();
+                    const projects = JSON.parse(projectsJson);
+                    const grid = document.getElementById('gallery-grid');
+                    grid.innerHTML = '';
+                    
+                    projects.forEach(p => {
+                        const card = document.createElement('div');
+                        card.style.background = '#2A2A2A';
+                        card.style.borderRadius = '8px';
+                        card.style.overflow = 'hidden';
+                        card.style.cursor = 'pointer';
+                        card.style.border = '1px solid #444';
+                        card.style.display = 'flex';
+                        card.style.flexDirection = 'column';
+                        
+                        const thumb = document.createElement('div');
+                        thumb.style.height = '150px';
+                        thumb.style.background = '#111';
+                        thumb.style.backgroundSize = 'contain';
+                        thumb.style.backgroundPosition = 'center';
+                        thumb.style.backgroundRepeat = 'no-repeat';
+                        if (p.thumbnail) {
+                            thumb.style.backgroundImage = `url(${p.thumbnail})`;
+                        } else {
+                            thumb.style.display = 'flex';
+                            thumb.style.alignItems = 'center';
+                            thumb.style.justifyContent = 'center';
+                            thumb.innerHTML = '<span class="material-symbols-outlined" style="font-size:48px; color:#555;">draft</span>';
+                        }
+                        
+                        const info = document.createElement('div');
+                        info.style.padding = '12px';
+                        info.style.display = 'flex';
+                        info.style.justifyContent = 'space-between';
+                        info.style.alignItems = 'center';
+                        
+                        const nameSpan = document.createElement('span');
+                        nameSpan.style.color = '#FFF';
+                        nameSpan.style.fontWeight = '500';
+                        nameSpan.innerText = p.name;
+                        
+                        const delBtn = document.createElement('span');
+                        delBtn.className = 'material-symbols-outlined';
+                        delBtn.innerText = 'delete';
+                        delBtn.style.color = '#FF3B30';
+                        delBtn.style.cursor = 'pointer';
+                        delBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            if (confirm('¿Eliminar este lienzo?')) {
+                                window.AndroidApp.deleteProject(p.id);
+                                if (currentProjectId === p.id) currentProjectId = 0;
+                                openGallery(); // Refresh
+                            }
+                        };
+                        
+                        info.appendChild(nameSpan);
+                        info.appendChild(delBtn);
+                        
+                        card.onclick = () => {
+                            currentProjectName = p.name;
+                            initDrawCanvas(p.id);
+                            document.getElementById('gallery-ui').style.display = 'none';
+                        };
+                        
+                        card.appendChild(thumb);
+                        card.appendChild(info);
+                        grid.appendChild(card);
+                    });
+                } catch(e) {
+                    console.error("Error loading gallery", e);
+                }
+            }
+        }
+
+        function createNewProject() {
+            currentProjectId = 0;
+            currentProjectName = 'Boceto ' + new Date().toLocaleTimeString();
+            document.getElementById('gallery-ui').style.display = 'none';
+            initDrawCanvas(0);
+        }
+
+        // Initially show gallery if app loaded
+        setTimeout(() => {
+            if (window.AndroidApp) {
+                openGallery();
+            } else {
+                document.getElementById('gallery-ui').style.display = 'none';
+                initDrawCanvas(0);
+            }
+        }, 500);
+
+        bindSlider('brush-size', 'brush-size-num', val => brushSize = parseInt(val));
+        bindSlider('brush-smooth', 'brush-smooth-num', val => {});
+        document.getElementById('brush-color').addEventListener('input', e => brushColor = e.target.value);
+
+        function toggle3DVisibility() {
+            const l = layers.find(x => x.type === 'mannequin');
+            if (!l) return;
+            
+            visibilityMode = (visibilityMode + 1) % 3;
+            const icon = document.querySelector('#tool-visibility span');
+            
+            if (visibilityMode === 0) {
+                l.visible = true;
+                l.opacity = 1.0;
+                icon.innerText = 'visibility';
+            } else if (visibilityMode === 1) {
+                l.visible = true;
+                l.opacity = 0.3;
+                icon.innerText = 'opacity';
+            } else {
+                l.visible = false;
+                icon.innerText = 'visibility_off';
+            }
+            
+            document.getElementById('canvas-container').style.display = l.visible ? 'flex' : 'none';
+            document.getElementById('canvas-container').style.opacity = l.opacity;
+            renderLayersUI();
+        }
+
+        let gridMode = 0; // 0 = off, 1 = ortho, 2 = persp
+        function toggleGrid() {
+            gridMode = (gridMode + 1) % 3;
+            const overlay = document.getElementById('grid-overlay');
+            const icon = document.querySelector('#tool-grid span');
+            
+            overlay.className = 'grid-overlay'; // reset
+            if (gridMode === 1) {
+                overlay.classList.add('show-ortho');
+                icon.innerText = 'grid_4x4';
+                icon.style.color = '#007ACC';
+            } else if (gridMode === 2) {
+                overlay.classList.add('show-persp');
+                icon.innerText = 'center_focus_strong';
+                icon.style.color = '#007ACC';
+            } else {
+                icon.innerText = 'grid_off';
+                icon.style.color = '#CCC';
+            }
+            
+            const l = layers.find(x => x.type === 'grid');
+            if (l && gridMode > 0) {
+                l.visible = true;
+                overlay.style.display = 'block';
+                renderLayersUI();
+            }
+        }
+
+        function toggleZenMode() {
+            document.body.classList.toggle('zen-mode');
+            setTimeout(onWindowResize, 50); // Ensure flexbox updates before resizing canvas
+        }
+
+        function showExportDialog() {
+            document.getElementById('export-dialog').style.display = 'flex';
+        }
+
+        function exportImage(include3D) {
+            document.getElementById('export-dialog').style.display = 'none';
+            document.getElementById('loading-overlay').style.display = 'flex';
+            
+            setTimeout(() => {
+                const finalCanvas = document.createElement('canvas');
+                const cArea = document.querySelector('.canvas-area');
+                finalCanvas.width = cArea.clientWidth;
+                finalCanvas.height = cArea.clientHeight;
+                const ctx = finalCanvas.getContext('2d');
+                
+                // Draw layers (bottom to top)
+                for (let i = 0; i < layers.length; i++) {
+                    const l = layers[i];
+                    if (!l.visible) continue;
+                    ctx.globalAlpha = l.opacity;
+                    if (l.type === 'draw') {
+                        ctx.drawImage(l.canvas, 0, 0);
+                    } else if (l.type === 'mannequin' && include3D) {
+                        renderer.render(scene, camera);
+                        ctx.drawImage(renderer.domElement, 0, 0, finalCanvas.width, finalCanvas.height);
+                    }
+                }
+                ctx.globalAlpha = 1.0;
+
+                const dataUrl = finalCanvas.toDataURL('image/png');
+                
+                if (window.AndroidApp && window.AndroidApp.saveImageToGallery) {
+                    window.AndroidApp.saveImageToGallery(dataUrl.split(',')[1]);
+                } else {
+                    const link = document.createElement('a');
+                    link.download = 'export.png';
+                    link.href = dataUrl;
+                    link.click();
+                }
+                document.getElementById('loading-overlay').style.display = 'none';
+            }, 100);
+        }
+
+        function clearCanvas() {
+            if (activeLayerIndex >= 0) {
+                const l = layers[activeLayerIndex];
+                if (l.type === 'draw' && !l.locked) l.ctx.clearRect(0, 0, l.canvas.width, l.canvas.height);
+            }
+        }
+
+        const interactionOverlay = document.getElementById('interaction-overlay');
+        interactionOverlay.addEventListener('pointerdown', e => {
+            if (e.button !== 0 && e.pointerType === 'mouse') return;
+            if (activeLayerIndex < 0) return;
+            const l = layers[activeLayerIndex];
+            if (!l.visible || l.locked || l.type !== 'draw') return;
+
+            isDrawing = true;
+            const rect = interactionOverlay.getBoundingClientRect();
+            drawX = e.clientX - rect.left;
+            drawY = e.clientY - rect.top;
+            drawP = getPressure(e);
+            lastX = drawX;
+            lastY = drawY;
+        });
+
+        interactionOverlay.addEventListener('pointermove', e => {
+            if (!isDrawing) return;
+            if (e.getCoalescedEvents) {
+                for (let evt of e.getCoalescedEvents()) draw(evt);
+            } else {
+                draw(e);
+            }
+        });
+
+        let strokeCount = 0;
+        const stopDrawing = (e) => {
+            if (isDrawing) {
+                if (e) draw(e, true);
+                strokeCount++;
+                if (strokeCount % 2 === 0) {
+                    saveSnapshot();
+                }
+            }
+            isDrawing = false;
+        };
+        interactionOverlay.addEventListener('pointerup', stopDrawing);
+        interactionOverlay.addEventListener('pointercancel', stopDrawing);
+        interactionOverlay.addEventListener('pointerout', stopDrawing);
+
+        function getPressure(e) {
+            let p = e.pressure !== undefined ? e.pressure : 0.5;
+            if (p === 0) p = 0.5;
+            if (e.pointerType !== 'pen' && e.pointerType !== 'stylus') p = 1.0;
+            return p;
+        }
+
+        function draw(e, isFinal = false) {
+            if (activeLayerIndex < 0) return;
+            const l = layers[activeLayerIndex];
+            if (!l.visible || l.locked || l.type !== 'draw') return;
+            const dCtx = l.ctx;
+
+            const rect = interactionOverlay.getBoundingClientRect();
+            const targetX = e.clientX - rect.left;
+            const targetY = e.clientY - rect.top;
+            const targetP = getPressure(e);
+            
+            // Smoothing/Stabilization
+            let smoothVal = parseInt(document.getElementById('brush-smooth').value) / 100;
+            let lerp = isFinal ? 1.0 : (1.0 - smoothVal);
+            if (lerp < 0.05) lerp = 0.05;
+            
+            drawX += (targetX - drawX) * lerp;
+            drawY += (targetY - drawY) * lerp;
+            drawP += (targetP - drawP) * lerp;
+            
+            dCtx.lineCap = 'round';
+            dCtx.lineJoin = 'round';
+            dCtx.strokeStyle = brushColor;
+            dCtx.fillStyle = brushColor;
+            
+            if (drawMode === 'eraser') {
+                dCtx.globalCompositeOperation = 'destination-out';
+                dCtx.globalAlpha = 1.0;
+                dCtx.lineWidth = brushSize * 2;
+                dCtx.beginPath(); dCtx.moveTo(lastX, lastY); dCtx.lineTo(drawX, drawY); dCtx.stroke();
+            } else {
+                dCtx.globalCompositeOperation = 'source-over';
+                let preset = brushPresets[activeBrushPreset];
+                let size = brushSize * preset.pressureCurve(drawP);
+                preset.render(dCtx, drawX, drawY, lastX, lastY, size);
+            }
+            
+            lastX = drawX;
+            lastY = drawY;
+        }
+    </script>
+</body>
+</html>
